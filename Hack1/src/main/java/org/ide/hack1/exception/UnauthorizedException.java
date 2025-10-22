@@ -1,0 +1,6 @@
+package org.ide.hack1.exception;
+
+public class UnauthorizedException extends RuntimeException {
+    public UnauthorizedException(String message) { super(message); }
+}
+
