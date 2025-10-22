@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:oreodb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls.enable: true
+
+llm:
+  github:
+    token: ${GITHUB_TOKEN:}
+    url: ${GITHUB_MODELS_URL:https://api.github.com/models}
+    model-id: ${MODEL_ID:openai-gpt-5-mini}
+
+jwt:
+  secret: ${JWT_SECRET:change_me_secure}
+  expiration: 3600 
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
