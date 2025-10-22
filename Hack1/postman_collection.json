@@ -1,0 +1,231 @@
+{
+  "info": {
+    "_postman_id": "oreo-insight-flow",
+    "name": "Oreo Insight Flow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "centralToken", "value": "" },
+    { "key": "branchToken", "value": "" },
+    { "key": "centralUserId", "value": "" },
+    { "key": "branchUserId", "value": "" },
+    { "key": "saleId1", "value": "" },
+    { "key": "lastRequestId", "value": "" },
+    { "key": "pollAttempts", "value": "0" }
+  ],
+  "item": [
+    {
+      "name": "Register CENTRAL",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"oreo.admin\",\n  \"email\": \"admin@oreo.com\",\n  \"password\": \"Oreo1234\",\n  \"role\": \"CENTRAL\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 201', function() { pm.response.to.have.status(201); });",
+              "var body = pm.response.json();",
+              "if (body && body.id) { pm.collectionVariables.set('centralUserId', body.id); }"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login CENTRAL",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"oreo.admin\",\n  \"password\": \"Oreo1234\"\n}" },
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 200', function() { pm.response.to.have.status(200); });",
+        "var b = pm.response.json();",
+        "if (b && b.token) { pm.collectionVariables.set('centralToken', b.token); }",
+        "if (b && b.role) { pm.collectionVariables.set('centralRole', b.role); }"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Register BRANCH (Miraflores)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"miraflores.user\",\n  \"email\": \"mira@oreo.com\",\n  \"password\": \"Oreo1234\",\n  \"role\": \"BRANCH\",\n  \"branch\": \"Miraflores\"\n}" },
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 201', function() { pm.response.to.have.status(201); });",
+        "var body = pm.response.json();",
+        "if (body && body.id) { pm.collectionVariables.set('branchUserId', body.id); }"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Login BRANCH",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"miraflores.user\",\n  \"password\": \"Oreo1234\"\n}" },
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 200', function() { pm.response.to.have.status(200); });",
+        "var b = pm.response.json();",
+        "if (b && b.token) { pm.collectionVariables.set('branchToken', b.token); }"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Create sale 1",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_CLASSIC_12\",\n  \"units\": 25,\n  \"price\": 1.99,\n  \"branch\": \"Miraflores\",\n  \"soldAt\": \"2025-09-01T10:30:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 201', function() { pm.response.to.have.status(201); });",
+        "var b = pm.response.json();",
+        "if (b && b.id) { pm.collectionVariables.set('saleId1', b.id); }"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Create sale 2",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_DOUBLE\",\n  \"units\": 40,\n  \"price\": 2.49,\n  \"branch\": \"Miraflores\",\n  \"soldAt\": \"2025-09-02T15:10:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 201', function() { pm.response.to.have.status(201); });" ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Create sale 3",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_THINS\",\n  \"units\": 32,\n  \"price\": 2.19,\n  \"branch\": \"San Isidro\",\n  \"soldAt\": \"2025-09-03T11:05:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 201', function() { pm.response.to.have.status(201); });" ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Create sale 4",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_DOUBLE\",\n  \"units\": 55,\n  \"price\": 2.49,\n  \"branch\": \"San Isidro\",\n  \"soldAt\": \"2025-09-04T18:50:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 201', function() { pm.response.to.have.status(201); });" ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Create sale 5",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_CLASSIC_12\",\n  \"units\": 20,\n  \"price\": 1.99,\n  \"branch\": \"Miraflores\",\n  \"soldAt\": \"2025-09-05T09:40:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [ "pm.test('status is 201', function() { pm.response.to.have.status(201); });" ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "List all sales (CENTRAL)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 200', function() { pm.response.to.have.status(200); });",
+        "var b = pm.response.json();",
+        "var count = 0;",
+        "if (Array.isArray(b)) { count = b.length; } else if (b.content) { count = b.content.length || b.totalElements || 0; }",
+        "pm.test('at least 5 sales exist', function() { pm.expect(count).to.be.at.least(5); });"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "List sales (BRANCH)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{branchToken}}" } ],
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 200', function() { pm.response.to.have.status(200); });",
+        "var b = pm.response.json();",
+        "var items = Array.isArray(b) ? b : (b.content || []);",
+        "pm.test('all items belong to Miraflores', function() { items.forEach(function(it){ pm.expect(it.branch).to.eql('Miraflores'); }); });"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Request weekly summary (BRANCH)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{branchToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"from\": \"2025-09-01\",\n  \"to\": \"2025-09-07\",\n  \"branch\": \"Miraflores\",\n  \"emailTo\": \"gerente@oreo.com\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales/summary/weekly", "host": ["{{baseUrl}}"], "path": ["sales","summary","weekly"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 202', function() { pm.response.to.have.status(202); });",
+        "var b = pm.response.json();",
+        "pm.collectionVariables.set('lastRequestId', b.requestId || '');",
+        "pm.collectionVariables.set('pollAttempts', '0');",
+        "postman.setNextRequest('Poll Report Status');",
+        "pm.test('requestId present', function() { pm.expect(b.requestId).to.be.a('string'); });"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Poll Report Status",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{branchToken}}" } ],
+        "url": { "raw": "{{baseUrl}}/reports/{{lastRequestId}}", "host": ["{{baseUrl}}"], "path": ["reports","{{lastRequestId}}"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 200', function() { pm.response.to.have.status(200); });",
+        "var res = pm.response.json();",
+        "var status = res.status;",
+        "var attempts = parseInt(pm.collectionVariables.get('pollAttempts') || '0');",
+        "if (status === 'PROCESSING') {",
+        "  attempts = attempts + 1;",
+        "  pm.collectionVariables.set('pollAttempts', attempts.toString());",
+        "  if (attempts < 6) { postman.setNextRequest('Poll Report Status'); } else { pm.test('timed out waiting for report', function() { pm.expect(status).to.equal('DONE'); }); }",
+        " } else {",
+        "  pm.test('report finished or failed', function() { pm.expect(['DONE','FAILED']).to.include(status); });",
+        "}"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Attempt create sale other branch (BRANCH) -> 403",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{branchToken}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"sku\": \"OREO_CLASSIC_12\",\n  \"units\": 10,\n  \"price\": 1.99,\n  \"branch\": \"San Isidro\",\n  \"soldAt\": \"2025-09-05T09:40:00Z\"\n}" },
+        "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('should return 403', function() { pm.response.to.have.status(403); });"
+      ], "type": "text/javascript" } } ]
+    },
+    {
+      "name": "Delete sale (CENTRAL)",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{centralToken}}" } ],
+        "url": { "raw": "{{baseUrl}}/sales/{{saleId1}}", "host": ["{{baseUrl}}"], "path": ["sales","{{saleId1}}"] }
+      },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('status is 204', function() { pm.response.to.have.status(204); });"
+      ], "type": "text/javascript" } } ]
+    }
+  ]
+}
