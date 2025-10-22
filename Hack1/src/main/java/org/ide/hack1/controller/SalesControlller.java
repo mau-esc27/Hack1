@@ -3,7 +3,14 @@ package org.ide.hack1.controller;
 import jakarta.validation.Valid;
 import org.ide.hack1.dto.sales.SaleRequest;
 import org.ide.hack1.dto.sales.SaleResponse;
+import org.ide.hack1.dto.summary.SummaryRequestDTO;
+import org.ide.hack1.dto.summary.SummaryResponseDTO;
+import org.ide.hack1.entity.ReportRequest;
+import org.ide.hack1.event.ReportRequestedEvent;
+import org.ide.hack1.exception.ForbiddenException;
+import org.ide.hack1.repository.ReportRequestRepository;
 import org.ide.hack1.service.sales.SalesService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -14,7 +21,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 @RestController
@@ -22,9 +30,13 @@ import java.util.Optional;
 public class SalesControlller {
 
     private final SalesService salesService;
+    private final ReportRequestRepository reportRequestRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public SalesControlller(SalesService salesService) {
+    public SalesControlller(SalesService salesService, ReportRequestRepository reportRequestRepository, ApplicationEventPublisher eventPublisher) {
         this.salesService = salesService;
+        this.reportRequestRepository = reportRequestRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     private String currentUsername() {
@@ -96,5 +108,60 @@ public class SalesControlller {
         String role = currentRole();
         salesService.deleteSale(id, role);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/summary/weekly")
+    public ResponseEntity<SummaryResponseDTO> requestWeeklySummary(@Valid @RequestBody SummaryRequestDTO req) {
+        // determine user and permissions
+        String username = currentUsername();
+        String role = currentRole();
+        String userBranch = currentBranch();
+
+        LocalDate from = req.getFrom();
+        LocalDate to = req.getTo();
+        String branch = req.getBranch();
+        String emailTo = req.getEmailTo();
+
+        // default to last 7 days if not provided
+        if (from == null || to == null) {
+            // last full 7 days ending yesterday
+            LocalDate end = LocalDate.now(ZoneOffset.UTC).minusDays(1);
+            LocalDate start = end.minusDays(6);
+            if (from == null) from = start;
+            if (to == null) to = end;
+        }
+
+        // BRANCH users can only request for their own branch
+        if ("BRANCH".equals(role)) {
+            if (branch != null && !branch.isBlank() && !branch.equals(userBranch)) {
+                throw new ForbiddenException("Branch users can only request summaries for their assigned branch");
+            }
+            // enforce user's branch
+            branch = userBranch;
+        }
+
+        // create ReportRequest and persist
+        ReportRequest rr = ReportRequest.builder()
+                .fromDate(from)
+                .toDate(to)
+                .branch(branch)
+                .emailTo(emailTo)
+                .requestedBy(username)
+                .build();
+
+        reportRequestRepository.save(rr);
+
+        // publish event for async processing
+        eventPublisher.publishEvent(new ReportRequestedEvent(rr.getId(), from, to, branch, emailTo, username));
+
+        SummaryResponseDTO resp = SummaryResponseDTO.builder()
+                .requestId(rr.getId())
+                .status(rr.getStatus() != null ? rr.getStatus().name() : ReportRequest.Status.PROCESSING.name())
+                .message(String.format("Su solicitud de reporte está siendo procesada. Recibirá el resumen en %s en unos momentos.", emailTo))
+                .estimatedTime("30-60 segundos")
+                .requestedAt(rr.getRequestedAt())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
     }
 }
