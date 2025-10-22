@@ -1,5 +1,6 @@
 package org.ide.hack1.event.Listeners;
 
+import org.ide.hack1.client.githubmodels.GithubModelsClient;
 import org.ide.hack1.event.ReportRequestedEvent;
 import org.ide.hack1.entity.ReportRequest;
 import org.ide.hack1.exception.NotFoundException;
@@ -16,6 +17,7 @@ import org.springframework.context.event.EventListener;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.text.DecimalFormat;
 
 @Component
 public class ReportEventlisteners {
@@ -25,13 +27,16 @@ public class ReportEventlisteners {
     private final ReportRequestRepository reportRequestRepository;
     private final SalesAggregationService salesAggregationService;
     private final EmailService emailService;
+    private final GithubModelsClient githubModelsClient;
 
     public ReportEventlisteners(ReportRequestRepository reportRequestRepository,
                                 SalesAggregationService salesAggregationService,
-                                EmailService emailService) {
+                                EmailService emailService,
+                                GithubModelsClient githubModelsClient) {
         this.reportRequestRepository = reportRequestRepository;
         this.salesAggregationService = salesAggregationService;
         this.emailService = emailService;
+        this.githubModelsClient = githubModelsClient;
     }
 
     @Async("taskExecutor")
@@ -56,8 +61,23 @@ public class ReportEventlisteners {
                 throw new IllegalStateException("failed to calculate aggregates");
             }
 
-            // generate simple summary (fallback until LLM integration)
-            String summary = buildSimpleSummary(agg);
+            // Try to generate summary via LLM if configured
+            String summary = null;
+            try {
+                String llm = githubModelsClient.generateSummary(agg, fromDate, toDate);
+                if (isValidSummary(llm, agg)) {
+                    summary = llm;
+                    log.info("Using LLM-generated summary for request {}", requestId);
+                } else if (llm != null) {
+                    log.warn("LLM returned summary but did not pass validation for request {}. Falling back.", requestId);
+                }
+            } catch (Exception e) {
+                log.error("LLM call failed for request {}: {}", requestId, e.getMessage());
+            }
+
+            if (summary == null) {
+                summary = buildSimpleSummary(agg);
+            }
 
             rr.setSummaryText(summary);
             rr.setStatus(ReportRequest.Status.DONE);
@@ -90,6 +110,27 @@ public class ReportEventlisteners {
             rr.setCompletedAt(Instant.now());
             reportRequestRepository.save(rr);
         }
+    }
+
+    private boolean isValidSummary(String text, SalesAggregatesDTO agg) {
+        if (text == null || text.isBlank()) return false;
+        // word count <= 120
+        String[] words = text.trim().split("\\s+");
+        if (words.length > 120) return false;
+
+        // Must mention at least one of: totalUnits, topSku, topBranch, totalRevenue
+        try {
+            if (agg.getTopSku() != null && !agg.getTopSku().isBlank() && text.contains(agg.getTopSku())) return true;
+            if (agg.getTopBranch() != null && !agg.getTopBranch().isBlank() && text.contains(agg.getTopBranch())) return true;
+            // check totalUnits numeric mention
+            if (text.contains(String.valueOf(agg.getTotalUnits()))) return true;
+            // check totalRevenue formatted with 2 decimals
+            DecimalFormat df = new DecimalFormat("0.00");
+            if (text.contains(df.format(agg.getTotalRevenue()))) return true;
+        } catch (Exception e) {
+            // ignore and fallback
+        }
+        return false;
     }
 
     private String buildSimpleSummary(SalesAggregatesDTO agg) {

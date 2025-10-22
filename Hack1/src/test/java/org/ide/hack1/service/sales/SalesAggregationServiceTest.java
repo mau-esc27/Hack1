@@ -1,25 +1,23 @@
 package org.ide.hack1.service.sales;
 
+import org.ide.hack1.dto.summary.SalesAggregatesDTO;
 import org.ide.hack1.entity.Sale;
 import org.ide.hack1.repository.SaleRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
-@Disabled("Tests disabled while implementing exception handling")
 @ExtendWith(MockitoExtension.class)
 class SalesAggregationServiceTest {
 
@@ -29,37 +27,51 @@ class SalesAggregationServiceTest {
     @InjectMocks
     private SalesAggregationService salesAggregationService;
 
-    private Instant now = Instant.parse("2025-09-07T00:00:00Z");
-    private Instant weekAgo = Instant.parse("2025-08-31T00:00:00Z");
-
-    @BeforeEach
-    void setUp() {
+    private Sale createSale(String id, String sku, int units, double price, String branch, Instant soldAt) {
+        Sale s = new Sale();
+        s.setId(id);
+        s.setSku(sku);
+        s.setUnits(units);
+        s.setPrice(price);
+        s.setBranch(branch);
+        s.setSoldAt(soldAt);
+        s.setCreatedBy("test");
+        s.setCreatedAt(Instant.now());
+        return s;
     }
 
     @Test
     void shouldCalculateCorrectAggregatesWithValidData() {
+        // Given
+        Instant now = Instant.now();
         List<Sale> mockSales = List.of(
-                Sale.builder().sku("OREO_CLASSIC").units(10).price(1.99).branch("Miraflores").soldAt(now).build(),
-                Sale.builder().sku("OREO_DOUBLE").units(5).price(2.49).branch("San Isidro").soldAt(now).build(),
-                Sale.builder().sku("OREO_CLASSIC").units(15).price(1.99).branch("Miraflores").soldAt(now).build()
+                createSale("s1", "OREO_CLASSIC", 10, 1.99, "Miraflores", now),
+                createSale("s2", "OREO_DOUBLE", 5, 2.49, "San Isidro", now),
+                createSale("s3", "OREO_CLASSIC", 15, 1.99, "Miraflores", now)
         );
 
         when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(mockSales);
 
-        var result = salesAggregationService.calculateAggregates(weekAgo, now, null);
+        // When
+        SalesAggregatesDTO result = salesAggregationService.calculateAggregates(Instant.EPOCH, Instant.now(), null);
 
+        // Then
         assertThat(result.getTotalUnits()).isEqualTo(30);
-        assertThat(result.getTotalRevenue()).isCloseTo((10+15)*1.99 + 5*2.49, org.assertj.core.data.Offset.offset(0.001));
+        double expectedRevenue = 10 * 1.99 + 5 * 2.49 + 15 * 1.99; // 10+15 =25 *1.99 + 12.45
+        assertThat(result.getTotalRevenue()).isEqualTo(expectedRevenue);
         assertThat(result.getTopSku()).isEqualTo("OREO_CLASSIC");
         assertThat(result.getTopBranch()).isEqualTo("Miraflores");
     }
 
     @Test
-    void shouldHandleEmptyList() {
+    void shouldHandleEmptySalesList() {
+        // Given
         when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(List.of());
 
-        var result = salesAggregationService.calculateAggregates(weekAgo, now, null);
+        // When
+        SalesAggregatesDTO result = salesAggregationService.calculateAggregates(Instant.EPOCH, Instant.now(), null);
 
+        // Then
         assertThat(result.getTotalUnits()).isEqualTo(0);
         assertThat(result.getTotalRevenue()).isEqualTo(0.0);
         assertThat(result.getTopSku()).isNull();
@@ -68,42 +80,54 @@ class SalesAggregationServiceTest {
 
     @Test
     void shouldFilterByBranch() {
-        List<Sale> mockSales = List.of(
-                Sale.builder().sku("A").units(3).price(1.0).branch("X").soldAt(now).build()
+        // Given
+        Instant now = Instant.now();
+        List<Sale> branchSales = List.of(
+                createSale("s1", "A", 3, 1.0, "Miraflores", now),
+                createSale("s2", "B", 2, 2.0, "Miraflores", now)
         );
-        when(saleRepository.findBySoldAtBetweenAndBranch(any(), any(), anyString(), any())).thenReturn(new PageImpl<>(mockSales));
+        when(saleRepository.findBySoldAtBetweenAndBranch(any(), any(), any(), any(PageRequest.class))).thenReturn(new PageImpl<>(branchSales));
 
-        var result = salesAggregationService.calculateAggregates(weekAgo, now, "X");
+        // When
+        SalesAggregatesDTO result = salesAggregationService.calculateAggregates(Instant.EPOCH, Instant.now(), "Miraflores");
 
-        assertThat(result.getTotalUnits()).isEqualTo(3);
-        assertThat(result.getTopBranch()).isEqualTo("X");
+        // Then
+        assertThat(result.getTotalUnits()).isEqualTo(5);
+        assertThat(result.getTopBranch()).isEqualTo("Miraflores");
     }
 
     @Test
     void shouldRespectDateFiltering() {
-        // here we simulate repository returning only sales in range
-        List<Sale> mockSales = List.of(
-                Sale.builder().sku("D").units(7).price(2.0).branch("B").soldAt(now).build()
+        // Given: simulate repository returning only sales in the date range
+        Instant inRange = Instant.parse("2025-09-02T00:00:00Z");
+        List<Sale> onlyRange = List.of(
+                createSale("s1", "X", 4, 1.0, "M", inRange)
         );
-        when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(mockSales);
+        when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(onlyRange);
 
-        var result = salesAggregationService.calculateAggregates(weekAgo, now, null);
+        // When
+        SalesAggregatesDTO result = salesAggregationService.calculateAggregates(inRange, inRange, null);
 
-        assertThat(result.getTotalUnits()).isEqualTo(7);
-        assertThat(result.getTopSku()).isEqualTo("D");
+        // Then
+        assertThat(result.getTotalUnits()).isEqualTo(4);
+        assertThat(result.getTotalRevenue()).isEqualTo(4.0);
     }
 
     @Test
-    void shouldHandleTieForTopSku() {
-        List<Sale> mockSales = List.of(
-                Sale.builder().sku("S1").units(10).price(1.0).branch("Z").soldAt(now).build(),
-                Sale.builder().sku("S2").units(10).price(1.0).branch("Z").soldAt(now).build()
+    void shouldChooseOneTopSkuWhenTie() {
+        // Given
+        Instant now = Instant.now();
+        List<Sale> sales = List.of(
+                createSale("s1", "SKU_A", 10, 1.0, "B", now),
+                createSale("s2", "SKU_B", 10, 1.0, "B", now)
         );
-        when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(mockSales);
+        when(saleRepository.findBySoldAtBetween(any(), any())).thenReturn(sales);
 
-        var result = salesAggregationService.calculateAggregates(weekAgo, now, null);
+        // When
+        SalesAggregatesDTO result = salesAggregationService.calculateAggregates(Instant.EPOCH, Instant.now(), null);
 
-        assertThat(result.getTotalUnits()).isEqualTo(20);
-        assertThat(result.getTopSku()).isIn("S1", "S2");
+        // Then: topSku should be one of the tied ones
+        assertThat(List.of("SKU_A", "SKU_B")).contains(result.getTopSku());
     }
 }
+
